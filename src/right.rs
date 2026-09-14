@@ -30,6 +30,7 @@ mod keyboard_central {
     #[register_processor(poll)]
     fn status_led() -> crate::status_led::CentralStatusLed {
         crate::status_led::CentralStatusLed::new(crate::status_led::XiaoRgb::new(
+            p.PWM0,
             p.P0_26.into(),
             p.P0_30.into(),
             p.P0_06.into(),

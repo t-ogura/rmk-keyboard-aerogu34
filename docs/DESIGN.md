@@ -101,14 +101,25 @@ D6 P1.11, D7 P1.12, D8 P1.13, D9 P1.14, D10 P1.15。P0.09 / P0.10 は NFC パッ
 
 ## 6. LED
 
-`status_led.rs` を central / peripheral 両用に。表示は Cornix の Xiao central と
-同じ（リセット理由 3 s → 接続状態 3 s → 消灯、変化時 3 s）。
+`status_led.rs` を central / peripheral 両用に。Xiao の RGB 3 ピンを **PWM0 の
+3 チャネル**で駆動（1 kHz、共通アノードなので `DutyCycle::normal(v)` = 明るさ v/1000）。
+消灯中は PWM を disable してピンを GPIO High に戻す（PWM が回っていると
+16 MHz クロックを握るため）。
 
-右 (central) は `ConnectionStatusChangeEvent` も購読し、BLE プロファイル /
-状態が変わるとプロファイル番号 + 1 回の点滅（青 = Connected、黄 = Advertising、
-Inactive は表示しない）。`[event.connection_status_change] subs = 2`。
-ZMK の rgbled-widget にあった**起動時のバッテリ残量表示**は未実装
-（`BatteryStatusEvent` の購読枠を足せば書ける）。
+表示は優先度つきの 3 スロット（boot > host > link）に「色 + パターン + 期限」を
+置くだけ。パターンは Solid / Blink / Breathe（三角波の二乗、下限 2.5 %）。
+tick 40 ms。
+
+- **host（右のみ）**: `ConnectionStatusChangeEvent` の `ble.state` と
+  `rmk::ble::is_profile_bonded(profile)`（fork `114881cb` で公開）で
+  Connected → 青 2 s、Advertising & bonded → 赤ブリージング ≤ 30 s、
+  Advertising & unbonded → 黄 100 ms 点滅 ≤ 30 s、Inactive → 消灯。
+  色は rgbled-widget 準拠。`[event.connection_status_change] subs = 2`
+- **link（両側）**: 緑 / 赤 2 s 点灯
+- **boot**: リセット理由 3 s（従来どおり）
+
+未実装: rgbled-widget の**起動時バッテリ残量表示**（`BatteryStatusEvent` の
+購読枠を足せば書ける）。
 
 ## 7. 進捗
 
@@ -151,6 +162,7 @@ ZMK の rgbled-widget にあった**起動時のバッテリ残量表示**は未
 
 | コミット | 内容 | 上流へ |
 | --- | --- | --- |
+| `114881cb` feat(ble): expose is_profile_bonded() for user code | LED が「登録済みで待ち」と「未登録」を区別するための公開関数。`ProfileManager` の bond 一覧をビットマスクで鏡写し | 出す（小さい。広告 PR と一緒でも） |
 | `ad5cf4c0` feat(ble): fast advertising window before the slow interval | ホスト向け広告を最初の N 秒は 30 ms、その後 200 ms（`[ble] advertising_fast_interval_ms` / `advertising_slow_interval_ms` / `advertising_fast_timeout_secs`）。§9 | **出す**。MoErgo の RMK フォーク (colonelpanic8/moergo-rmk) も同じ 3 キー名で同じことをしている |
 | `b93572ca` feat(pointing): optional deadzone on PointingDevice | `PointingDevice` にデッドゾーン（バーストの合計が `threshold` に達するまで報告しない、`timeout` 無動作でリセット）。paw3222 / pmw3610 / pmw33xx の `deadzone_threshold` / `deadzone_timeout_ms`。ZMK の `zmk-input-processor-deadzone` と同じ意味論 | 出す価値あり。`pr/pointing-deadzone` に切り出し予定（Cornix `docs/UPSTREAM_PRS.md` の流儀） |
 
