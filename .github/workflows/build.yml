@@ -23,9 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # bindgen (nrf-sdc-sys / nrf-mpsl-sys) needs libclang
-      - name: Install libclang
-        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+      # bindgen (nrf-sdc-sys / nrf-mpsl-sys) needs libclang; trouble-host's
+      # P-256 pairing code (p256-cortex-m4-sys) is C and needs an ARM gcc.
+      - name: Install libclang and the ARM C toolchain
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev gcc-arm-none-eabi
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

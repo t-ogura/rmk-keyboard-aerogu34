@@ -124,7 +124,8 @@ rustup target add thumbv7em-none-eabihf
 rustup component add llvm-tools
 cargo install cargo-binstall
 cargo binstall flip-link cargo-binutils cargo-hex-to-uf2
-# nrf-sdc / nrf-mpsl のビルドに libclang が要る (Ubuntu: apt install libclang-dev)
+# nrf-sdc / nrf-mpsl のビルドに libclang、BLE ペアリングの P-256 (p256-cortex-m4-sys,
+# C 実装) に ARM 用 gcc が要る:  Ubuntu: apt install libclang-dev gcc-arm-none-eabi
 
 ./package.sh              # -> firmware/aerogu34_{right,left}.uf2
 ./package.sh --dev        # keyboard.toml のキーマップ変更を rmk の再ビルド無しで反映（下記）
