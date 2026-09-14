@@ -70,7 +70,12 @@ embassy-executor = { version = "0.10", features = ["defmt", "platform-cortex-m",
 defmt = "1"
 defmt-rtt = "1"
 log = { version = "0.4", optional = true }
-panic-probe = { version = "1", features = ["print-defmt"] }
+# Not the crates.io panic-probe: a local crate of the same name (RMK's macros
+# import it by name) that keeps the panic message in RAM across the reset it
+# causes, since this board has no debug probe to print it to. See
+# panic-record/src/lib.rs.
+panic-probe = { path = "panic-record" }
+heapless = "0.8"
 static_cell = "2"
 
 [build-dependencies]

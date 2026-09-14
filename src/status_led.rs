@@ -42,6 +42,7 @@
 //! | blue | **watchdog** -- something stopped feeding it, i.e. a hang the WDT recycled |
 //! | magenta, solid | the previous run was up and ended by a soft reset with no reason recorded |
 //! | magenta, N blinks | the previous run **rebooted itself** for reason N: 1 BLE runner stopped, 2 storage unreadable, 3 stale split link, 4 host-requested reset |
+//! | magenta, 5 blinks | the previous run **panicked**; the message is on the log of a `usb_log` build (`panic-record/`) |
 //! | white | **CPU lockup** -- a fault inside a fault |
 //!
 //! # Power
@@ -170,6 +171,8 @@ enum Reason {
     /// The previous run's GPREGRET2 marker survived: 0 = it was up and ended
     /// without recording why, 1..=4 = RMK's own reboot reason.
     SoftReboot(u8),
+    /// The previous run panicked (`panic-record/`).
+    Panic,
 }
 
 /// Written to GPREGRET2 once this firmware is up; RMK overwrites it with
@@ -240,6 +243,10 @@ struct Display {
     /// The last battery level seen, so only the first reading and later
     /// critical drops light the LED.
     battery_level: Option<u8>,
+    /// What the previous run said when it panicked, to repeat on the log
+    /// until someone has had a chance to open the port.
+    #[cfg(feature = "usb_log")]
+    last_panic: Option<heapless::String<240>>,
 }
 
 impl Display {
@@ -260,6 +267,8 @@ impl Display {
             Reason::Watchdog
         } else if marker == ALIVE_MARKER {
             Reason::SoftReboot(0)
+        } else if marker == 0xA0 | panic_probe::PANIC_CODE {
+            Reason::Panic
         } else if marker & 0xF0 == 0xA0 {
             Reason::SoftReboot(marker & 0x0F)
         } else if raw & (1 << 2) != 0 {
@@ -277,6 +286,7 @@ impl Display {
                 Kind::Blink { half: CODE_BLINK_TICKS },
                 2 * CODE_BLINK_TICKS * code as u32,
             )),
+            Reason::Panic => Some((MAGENTA, Kind::Blink { half: CODE_BLINK_TICKS }, 2 * CODE_BLINK_TICKS * 5)),
         }
         .map(|(rgb, kind, len)| Pattern {
             rgb,
@@ -293,7 +303,11 @@ impl Display {
             host: None,
             link: None,
             battery_level: None,
+            #[cfg(feature = "usb_log")]
+            last_panic: panic_probe::take(),
         };
+        #[cfg(not(feature = "usb_log"))]
+        let _ = panic_probe::take();
         d.apply();
         d
     }
@@ -333,6 +347,17 @@ impl Display {
 
     fn step(&mut self) {
         self.tick = self.tick.wrapping_add(1);
+        // The log is a small pipe that nobody may be reading yet; say it
+        // every 5 s for the first minute, then let it go.
+        #[cfg(feature = "usb_log")]
+        if let Some(text) = &self.last_panic
+            && self.tick % ticks(5000) == 1
+        {
+            ::log::error!("previous run panicked: {}", text.as_str());
+            if self.tick > ticks(60_000) {
+                self.last_panic = None;
+            }
+        }
         self.apply();
     }
 
