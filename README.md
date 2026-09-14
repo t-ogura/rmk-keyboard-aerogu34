@@ -104,6 +104,58 @@ ZMK との違い:
 フラッシュに保存され再起動後も残りますが、**ファームウェアを更新すると
 `keyboard.toml` の内容に戻ります**（設定領域が初期化されるため）。
 
+## カスタマイズ: Vial でできること / ソースを変えること
+
+### Vial で変えられる（ビルド不要、フラッシュに保存される）
+
+| 項目 | 備考 |
+| --- | --- |
+| 5 レイヤ全部のキー配置 | レイヤ数 (5) は固定 |
+| Mod-Tap / Layer-Tap の追加・変更 | Vial で作ったものは `[behavior.morse]` の既定値（300 ms、permissive hold）で動く |
+| コンボの編集 | 枠は 8 個で、初期キーマップの 8 個で埋まっている。増やすには `combo_max_num`（下記） |
+| タップダンス（RMK では "morse"） | 枠 8 個 |
+| マクロ | 全体で 256 バイト |
+| BLE プロファイルキー `BT0`〜`BT4` / `CLR_BT`、マウスボタン / ホイール | User キーコードとして選べる |
+| QMK Settings タブ: コンボのタイムアウト、タッピングターム、ワンショット、permissive hold | タッピングタームは**既定プロファイルにだけ**効く。ホームロウ Mod (HRM) と親指 (THUMB) は `keyboard.toml` の値のまま |
+
+### ソースを変える必要があるもの
+
+トラックボールと動作パラメータは `keyboard.toml`（一部は `src/*.rs`）にあり、
+変えたらビルドが要ります。**手元に Rust 環境が無くても、GitHub でフォークして
+ブラウザで編集すれば Actions がビルドしてくれます**（後述）。
+
+| 変えたいこと | 場所 | 例 |
+| --- | --- | --- |
+| トラックボールの感度 (CPI) | `keyboard.toml` `[[split.central.input_device.paw3222]]` | `cpi = 800`（608〜4826、38 刻み） |
+| カーソルの向き | 同上 | `invert_x = true` / `invert_y = true` |
+| 静止時のノイズで勝手にマウスレイヤに入る | 同上 | `deadzone_threshold = 10`（カウント数、0 で無効）/ `deadzone_timeout_ms = 300` |
+| オートマウスレイヤの対象レイヤ・戻るまでの時間・入らないレイヤ | `keyboard.toml` `[[behavior.auto_mouse_layer]]` | `target_layer = 4` / `timeout = "1000ms"` / `exclude_layers = [3]` |
+| スクロールレイヤの番号、スクロール速度・向き、カーソル倍率 | `src/pointing_mode.rs` | `SCROLL_LAYER` / `MOUSE_LAYER`、`SCROLL_MODE` の `divisor_x/y`（大きいほど遅い）と `invert_x/y`、`CURSOR_MODE` の `multiplier_x/y` |
+| ホームロウ Mod / 親指のタップホールド時間 | `keyboard.toml` `[behavior.morse.profiles]` | `HRM = { ..., hold_timeout = "300ms", gap_timeout = "300ms" }` / `THUMB = { ... }` |
+| レイヤ数 | `keyboard.toml` `[keymap] layers` + `[[keymap.layer]]` を追加 | |
+| コンボ / タップダンスの枠 | `keyboard.toml` `[rmk]` | `combo_max_num = 16` / `morse_max_num = 16` |
+| BLE プロファイル数 | `keyboard.toml` `[rmk]` | `ble_profiles_num = 5`（Vial のカスタムキーは `vial.json` の `customKeycodes` も合わせる） |
+| 無操作からスリープまでの時間 | `keyboard.toml` `[rmk]` | `split_central_sleep_timeout_seconds = 30` |
+| 切替後の再接続の速さ / 消費電力 | `keyboard.toml` `[ble]` | `advertising_fast_interval_ms = 30` / `advertising_fast_timeout_secs = 30` |
+| LED の色・パターン | `src/status_led.rs` | `RED` `BLUE` … と `host_status()` / `link_status()` |
+| キーマップの初期値 | `keyboard.toml` `[[keymap.layer]]` | 行は物理配置どおり（左 5 → 右 5、親指 2+2） |
+
+`keyboard.toml` の各項目にはコメントで理由を書いてあります。RMK 側の全項目は
+[RMK の設定リファレンス](https://rmk.rs/main/docs/configuration/appendix)を参照。
+
+### フォークしてブラウザだけでビルドする
+
+1. このリポジトリを GitHub で **Fork**
+2. 自分のフォークの **Actions** タブを開き、ワークフローを有効化（フォーク直後は無効）
+3. ブラウザで `keyboard.toml`（や `src/*.rs`）を編集して main に commit
+4. 数分で Actions が終わるので、その run の **Artifacts → `firmware`** から UF2 を
+   ダウンロードして書き込む
+
+タグ `vX.Y.Z` を打てば Release ページにも UF2 が付きます（`.github/workflows/build.yml`）。
+
+**注意**: `keyboard.toml` のキーマップ・動作設定は、新しいファームウェアを
+書いたときに一度だけ反映され、そのとき Vial の編集と BLE ボンドは消えます。
+
 ## 入手
 
 - [Releases](https://github.com/t-ogura/rmk-keyboard-aerogu34/releases) —
