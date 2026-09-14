@@ -41,7 +41,10 @@ map = """
 """
 
 [keymap]
-layers = 5
+# Five layers in use, three empty. Vial and Rynk cannot add layers -- the
+# count is fixed when the firmware is built -- so spare ones are provided
+# here for users to fill in.
+layers = 8
 
 # Transcribed from zmk-keyboard-aerogu34/config/aerogu34.keymap, layer for
 # layer. Each `keys` line is one physical row in the order of `[layout] map`
@@ -94,6 +97,33 @@ name = "mouse"
 keys = """
 _ _ _ _ _  _ _ MouseBtn3 _ _
 _ _ _ _ _  _ MouseBtn1 _ MouseBtn2 _
+_ _ _ _ _  _ _ _ _ _
+_ _  _ _
+"""
+
+[[keymap.layer]]
+name = "user5"
+keys = """
+_ _ _ _ _  _ _ _ _ _
+_ _ _ _ _  _ _ _ _ _
+_ _ _ _ _  _ _ _ _ _
+_ _  _ _
+"""
+
+[[keymap.layer]]
+name = "user6"
+keys = """
+_ _ _ _ _  _ _ _ _ _
+_ _ _ _ _  _ _ _ _ _
+_ _ _ _ _  _ _ _ _ _
+_ _  _ _
+"""
+
+[[keymap.layer]]
+name = "user7"
+keys = """
+_ _ _ _ _  _ _ _ _ _
+_ _ _ _ _  _ _ _ _ _
 _ _ _ _ _  _ _ _ _ _
 _ _  _ _
 """
@@ -265,6 +295,10 @@ qmark        = "SHIFTED(Slash)"            # ?
 # bond (the `&bt BT_CLR` the ZMK combo used).
 [rmk]
 ble_profiles_num = 5
+# Headroom for Vial / Rynk users: the keymap's own eight combos would fill
+# RMK's default of 8, and morse (tap dance) entries default to 8.
+combo_max_num = 16
+morse_max_num = 16
 # ZMK's CONFIG_ZMK_IDLE_TIMEOUT default. Any key, ball movement or host
 # activity wakes the central; while asleep the fork keeps a low-duty
 # reconnect scan running so a half switched on later joins by itself.

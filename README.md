@@ -11,6 +11,10 @@ Aerogu34 ファームウェアです。ZMK 版
 | 右 | split central — USB / BLE でホストに接続、トラックボール、キーマップ、Vial | `firmware/aerogu34_right.uf2` |
 | 左 | split peripheral — 右へ BLE で送るだけ | `firmware/aerogu34_left.uf2` |
 
+キーマップ編集のホスト側ツールで 2 種類あります（後述の「Vial 版と Rynk 版」）:
+`aerogu34_*.uf2` が **Vial 版**（標準）、`aerogu34_*_rynk.uf2` が **Rynk 版**
+（RMK 純正 GUI、実験的）。左右で同じ版を書いてください。
+
 ## 状態
 
 実機で確認済み: 全キー、Vial、トラックボール（カーソル / オートマウスレイヤ /
@@ -110,10 +114,10 @@ ZMK との違い:
 
 | 項目 | 備考 |
 | --- | --- |
-| 5 レイヤ全部のキー配置 | レイヤ数 (5) は固定 |
+| 8 レイヤ全部のキー配置 | レイヤ 0〜4 が初期キーマップ、**5〜7 は空き**。レイヤ数自体はビルド時に固定で、Vial / Rynk からは増やせない |
 | Mod-Tap / Layer-Tap の追加・変更 | Vial で作ったものは `[behavior.morse]` の既定値（300 ms、permissive hold）で動く |
-| コンボの編集 | 枠は 8 個で、初期キーマップの 8 個で埋まっている。増やすには `combo_max_num`（下記） |
-| タップダンス（RMK では "morse"） | 枠 8 個 |
+| コンボの編集 | 枠 16 個（初期キーマップが 8 個使用） |
+| タップダンス（RMK では "morse"） | 枠 16 個 |
 | マクロ | 全体で 256 バイト |
 | BLE プロファイルキー `BT0`〜`BT4` / `CLR_BT`、マウスボタン / ホイール | User キーコードとして選べる |
 | QMK Settings タブ: コンボのタイムアウト、タッピングターム、ワンショット、permissive hold | タッピングタームは**既定プロファイルにだけ**効く。ホームロウ Mod (HRM) と親指 (THUMB) は `keyboard.toml` の値のまま |
@@ -132,7 +136,7 @@ ZMK との違い:
 | オートマウスレイヤの対象レイヤ・戻るまでの時間・入らないレイヤ | `keyboard.toml` `[[behavior.auto_mouse_layer]]` | `target_layer = 4` / `timeout = "1000ms"` / `exclude_layers = [3]` |
 | スクロールレイヤの番号、スクロール速度・向き、カーソル倍率 | `src/pointing_mode.rs` | `SCROLL_LAYER` / `MOUSE_LAYER`、`SCROLL_MODE` の `divisor_x/y`（大きいほど遅い）と `invert_x/y`、`CURSOR_MODE` の `multiplier_x/y` |
 | ホームロウ Mod / 親指のタップホールド時間 | `keyboard.toml` `[behavior.morse.profiles]` | `HRM = { ..., hold_timeout = "300ms", gap_timeout = "300ms" }` / `THUMB = { ... }` |
-| レイヤ数 | `keyboard.toml` `[keymap] layers` + `[[keymap.layer]]` を追加 | |
+| レイヤ数（8 より増やす） | `keyboard.toml` `[keymap] layers` + `[[keymap.layer]]` を追加 | |
 | コンボ / タップダンスの枠 | `keyboard.toml` `[rmk]` | `combo_max_num = 16` / `morse_max_num = 16` |
 | BLE プロファイル数 | `keyboard.toml` `[rmk]` | `ble_profiles_num = 5`（Vial のカスタムキーは `vial.json` の `customKeycodes` も合わせる） |
 | 無操作からスリープまでの時間 | `keyboard.toml` `[rmk]` | `split_central_sleep_timeout_seconds = 30` |
@@ -142,6 +146,27 @@ ZMK との違い:
 
 `keyboard.toml` の各項目にはコメントで理由を書いてあります。RMK 側の全項目は
 [RMK の設定リファレンス](https://rmk.rs/main/docs/configuration/appendix)を参照。
+
+### Vial 版と Rynk 版
+
+RMK には Vial のほかに純正のホストプロトコル **Rynk** があり、
+GUI は <https://gui.rmk.rs/>（Chrome / Edge、WebUSB）。二つは排他なので
+ファームウェアが 2 種類あります。
+
+| | Vial 版 `aerogu34_*.uf2` | Rynk 版 `aerogu34_*_rynk.uf2` |
+| --- | --- | --- |
+| ツール | [Vial](https://get.vial.today/)（デスクトップ / Web、USB・BLE） | [gui.rmk.rs](https://gui.rmk.rs/)（USB、WebUSB） |
+| キーマップ / コンボ / タップダンス / マクロ | ○ | ○ |
+| タップホールドの詳細（HRM / THUMB プロファイル別の hold timeout、permissive hold、flow tap、quick tap …） | △ 既定プロファイルの timeout のみ | **○** |
+| BT パネル、既定レイヤ、レイアウトバリアント | △ キーとして | ○ 専用画面 |
+| 状態表示（レイヤ、バッテリ、接続、左右） | × | ○ |
+| トラックボール設定 | × | × |
+| 成熟度 | RMK の既定。安定 | **実験的**。プロトコルが RMK のリリースごとに変わりうる。gui.rmk.rs が新しい RMK を前提にしていて噛み合わないことがある |
+
+迷ったら Vial 版。Rynk 版は「RMK らしい UI を試したい」人向けで、動かなければ
+Vial 版に戻してください。**キーマップは両版で同じ形式で保存されている**ので、
+焼き替えても Vial / Rynk で編集した内容は引き継がれます（ファームウェアが
+変わるので初回起動時に再同期が走り、BLE ボンドは消えます）。
 
 ### フォークしてブラウザだけでビルドする
 
@@ -160,7 +185,7 @@ ZMK との違い:
 
 - [Releases](https://github.com/t-ogura/rmk-keyboard-aerogu34/releases) —
   タグごとの UF2（推奨）
-- [firmware/](firmware/) — main の最新ビルド
+- [firmware/](firmware/) — main の最新ビルド（Vial 版・Rynk 版の 4 ファイル）
 - [GitHub Actions](../../actions) — push ごとの Artifacts `firmware`
 
 ## ソースからビルドする
@@ -179,9 +204,10 @@ cargo binstall flip-link cargo-binutils cargo-hex-to-uf2
 # nrf-sdc / nrf-mpsl のビルドに libclang、BLE ペアリングの P-256 (p256-cortex-m4-sys,
 # C 実装) に ARM 用 gcc が要る:  Ubuntu: apt install libclang-dev gcc-arm-none-eabi
 
-./package.sh              # -> firmware/aerogu34_{right,left}.uf2
+./package.sh              # Vial 版 -> firmware/aerogu34_{right,left}.uf2
+./package.sh --host rynk  # Rynk 版 -> firmware/aerogu34_{right,left}_rynk.uf2
+./package.sh --host both  # 両方（CI と同じ）
 ./package.sh --dev        # keyboard.toml のキーマップ変更を rmk の再ビルド無しで反映（下記）
-./package.sh --host rynk  # Vial の代わりに RMK 純正の Rynk (https://gui.rmk.rs/)
 ./package.sh --log        # 右半分の RMK ログを USB シリアルに出す診断ビルド
 ```
 

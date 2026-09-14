@@ -3,8 +3,8 @@
 # reaches into the storage sectors ([storage] start_addr in keyboard.toml).
 # Run from anywhere; artefacts land in firmware/.
 #
-#   ./package.sh                 Vial build (default)      -> firmware/
-#   ./package.sh --host rynk     Rynk build                -> firmware/rynk/
+#   ./package.sh                 Vial build (default)      -> firmware/aerogu34_{right,left}.uf2
+#   ./package.sh --host rynk     Rynk build                -> firmware/aerogu34_{right,left}_rynk.uf2
 #   ./package.sh --host both     both
 #   ./package.sh --log           right half with RMK's log on a USB serial port -> .../log/
 #   ./package.sh --dev           clear_layout = true: keyboard.toml keymap edits reach the
@@ -57,8 +57,11 @@ if dev == "1":
 open(dst, "w", encoding="utf-8").write(s)
 PY
   export KEYBOARD_TOML_PATH="$toml"
+  # Both flavours land in firmware/ side by side, the Rynk pair with a
+  # `_rynk` suffix, so a Release can attach the whole directory.
+  local name_suffix=""
   if [ "$flavour" = rynk ]; then
-    out="firmware/rynk"; suffix="/rynk"
+    out="firmware"; suffix="/rynk"; name_suffix="_rynk"
     features_left="rynk,defmt"; features_right="rynk,defmt"
   else
     out="firmware"; suffix=""
@@ -68,27 +71,27 @@ PY
     # Right half only: RMK's log over USB CDC in place of defmt. Own target
     # dir and output dir so it never overwrites the normal build.
     features_right="${features_right//defmt/usb_log}"
-    suffix="$suffix/log"; out="$out/log"
+    suffix="$suffix/log"; out="$out/log"; mkdir -p "$out"
   fi
   mkdir -p "$out"
 
   local tgt="target$suffix"
   CARGO_TARGET_DIR="$tgt" cargo build --release --no-default-features --features "$features_right" --bin right
   CARGO_TARGET_DIR="$tgt" cargo objcopy --release --no-default-features --features "$features_right" --bin right -- -O ihex "$tmp/right.hex"
-  cargo hex-to-uf2 --input-path "$tmp/right.hex" --output-path "$out/aerogu34_right.uf2" --family nrf52840
+  cargo hex-to-uf2 --input-path "$tmp/right.hex" --output-path "$out/aerogu34_right$name_suffix.uf2" --family nrf52840
   if [ "$LOG" = 0 ]; then
     CARGO_TARGET_DIR="$tgt" cargo build --release --no-default-features --features "$features_left" --bin left
     CARGO_TARGET_DIR="$tgt" cargo objcopy --release --no-default-features --features "$features_left" --bin left -- -O ihex "$tmp/left.hex"
-    cargo hex-to-uf2 --input-path "$tmp/left.hex" --output-path "$out/aerogu34_left.uf2" --family nrf52840
+    cargo hex-to-uf2 --input-path "$tmp/left.hex" --output-path "$out/aerogu34_left$name_suffix.uf2" --family nrf52840
   fi
 
   # Both halves are Xiao BLEs: every image must start at 0x27000 (behind the
   # s140 SoftDevice the bootloader ships with) and end below the storage.
-  python3 - "$out" "$STORAGE" "$flavour" <<'PY'
+  python3 - "$out" "$STORAGE" "$flavour" "$name_suffix" <<'PY'
 import os, struct, sys
-out, storage, flavour = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+out, storage, flavour, sfx = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
 bad = False
-for name in ("aerogu34_right.uf2", "aerogu34_left.uf2"):
+for name in (f"aerogu34_right{sfx}.uf2", f"aerogu34_left{sfx}.uf2"):
     path = os.path.join(out, name)
     if not os.path.exists(path):
         continue

@@ -151,6 +151,14 @@ tick 40 ms。
 「完全に無反応」のときの切り分け順は Cornix DESIGN §11.0 / §11.8:
 デバイス名 ≤ 22 バイト → HFXO → 最小構成から足す。
 
+### v0.1.1 (2026-09-14)
+
+- レイヤ 8（5〜7 は空。Vial / Rynk からレイヤは増やせないので予備）、
+  `combo_max_num` / `morse_max_num` = 16
+- Rynk 版を配布物に追加（`package.sh --host both`、`firmware/*_rynk.uf2`、
+  CI も両方）。Vial との比較は README。Rynk は実験的だが「RMK の配布自体が
+  試験的なので試験的な UI も出す」というユーザー判断
+
 ### Phase C — 整備
 
 - Cornix と共通のコード (`hfxo` / `status_led` / `build.rs` 補助 / `memory.x`)

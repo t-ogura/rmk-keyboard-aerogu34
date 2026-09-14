@@ -44,8 +44,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build and package
-        run: ./package.sh
+      - name: Build and package (Vial and Rynk flavours)
+        run: ./package.sh --host both
 
       - uses: actions/upload-artifact@v4
         with:
