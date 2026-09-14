@@ -37,7 +37,21 @@
 //!   activates over the scroll layer, and steps aside immediately if it was
 //!   already up, so a definitive `LayerChangeEvent(3)` always follows.
 
-use rmk::event::{LayerChangeEvent, PointingProcessorEvent, publish_event};
+//! # Vial and Rynk flavours
+//!
+//! With Vial there is no host-side pointing configuration, so this
+//! controller drives the mode from the layer, as above. With Rynk the
+//! firmware carries a runtime pointing configuration -- per-device default
+//! mode plus per-layer overrides -- that the host (rynkbench) reads,
+//! edits and stores, and the processor follows it by itself. Publishing a
+//! mode from here would pin the processor to "explicit" mode and shut the
+//! host out, so under `rynk` this controller only **seeds** that
+//! configuration on a board that has none yet (first boot after flashing),
+//! with the same values the Vial flavour hard-codes, and then stays quiet.
+
+#[cfg(not(feature = "rynk"))]
+use rmk::event::{PointingProcessorEvent, publish_event};
+use rmk::event::LayerChangeEvent;
 use rmk::input_device::pointing::{CursorConfig, PointingMode, ScrollConfig};
 use rmk::macros::processor;
 
@@ -49,6 +63,7 @@ const SCROLL_LAYER: u8 = 3;
 
 /// The auto mouse layer. Raised by trackball motion rather than by the user,
 /// so it carries no opinion about which mode the trackball should be in.
+#[cfg(not(feature = "rynk"))]
 const MOUSE_LAYER: u8 = 4;
 
 /// 1:1, as the ZMK chain had no scaler. The 180-degree rotation is applied
@@ -90,14 +105,24 @@ const SCROLL_MODE: PointingMode = PointingMode::Scroll(ScrollConfig {
 /// disturb the scroll accumulator.
 #[processor(subscribe = [LayerChangeEvent], poll_interval = 200)]
 pub struct PointingModeController {
+    #[cfg(not(feature = "rynk"))]
     mode: PointingMode,
+    /// Rynk: whether the runtime configuration has been seeded (or found).
+    #[cfg(feature = "rynk")]
+    seeded: bool,
 }
 
 impl PointingModeController {
     pub fn new() -> Self {
-        Self { mode: CURSOR_MODE }
+        Self {
+            #[cfg(not(feature = "rynk"))]
+            mode: CURSOR_MODE,
+            #[cfg(feature = "rynk")]
+            seeded: false,
+        }
     }
 
+    #[cfg(not(feature = "rynk"))]
     fn publish(&self) {
         publish_event(PointingProcessorEvent {
             device_id: TRACKBALL_ID,
@@ -106,19 +131,68 @@ impl PointingModeController {
     }
 
     async fn on_layer_change_event(&mut self, event: LayerChangeEvent) {
-        let mode = match event.0 {
-            SCROLL_LAYER => SCROLL_MODE,
-            MOUSE_LAYER => return,
-            _ => CURSOR_MODE,
-        };
-        if mode == self.mode {
-            return;
+        #[cfg(feature = "rynk")]
+        {
+            let _ = event;
         }
-        self.mode = mode;
-        self.publish();
+        #[cfg(not(feature = "rynk"))]
+        {
+            let mode = match event.0 {
+                SCROLL_LAYER => SCROLL_MODE,
+                MOUSE_LAYER => return,
+                _ => CURSOR_MODE,
+            };
+            if mode == self.mode {
+                return;
+            }
+            self.mode = mode;
+            self.publish();
+        }
     }
 
     async fn poll(&mut self) {
+        #[cfg(feature = "rynk")]
+        {
+            if !self.seeded {
+                self.seeded = seed_runtime_config().await;
+            }
+        }
+        #[cfg(not(feature = "rynk"))]
         self.publish();
     }
+}
+
+/// Rynk: give a never-configured board the Vial flavour's policy -- cursor
+/// by default, the wheel on the scroll layer -- so the trackball works
+/// before anyone opens the GUI. A board that already holds a configuration
+/// is left alone: that is the user's, edited from the host.
+///
+/// Returns whether the configuration is settled (found or written); the
+/// caller retries on the next poll otherwise, e.g. while storage is still
+/// restoring it.
+#[cfg(feature = "rynk")]
+async fn seed_runtime_config() -> bool {
+    use rmk::input_device::pointing_config;
+    use rmk::types::protocol::rynk::{PointingConfig, PointingDeviceConfig, PointingLayerOverride};
+
+    let current = pointing_config::get().await;
+    if current.device_count > 0 {
+        return true;
+    }
+    let mut config = PointingConfig::default();
+    config.revision = current.revision;
+    config.device_count = 1;
+    config.devices[0] = PointingDeviceConfig {
+        device_id: TRACKBALL_ID,
+        mode: CURSOR_MODE,
+    };
+    config.override_count = 1;
+    config.overrides[0] = PointingLayerOverride {
+        layer: SCROLL_LAYER,
+        device_id: TRACKBALL_ID,
+        mode: SCROLL_MODE,
+    };
+    // `replace` validates against the keymap's layer count; NUM_LAYER is not
+    // reachable from here, so pass one that admits the scroll layer.
+    pointing_config::replace(config, SCROLL_LAYER as usize + 1).await.is_ok()
 }
