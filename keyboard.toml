@@ -147,6 +147,11 @@ num_sectors = 8
 # layout items are overwritten in place on every boot (bonds survive), at
 # the cost that Vial edits do not.
 clear_layout = false
+# A new firmware build re-initialises the storage (keymap back to this file,
+# Vial edits gone), but the fork carries the BLE bonds, the active profile
+# and the split peer over it, so an update does not need the hosts paired
+# again. `clear_storage = true` is the way to forget them on purpose.
+keep_bonds = true
 
 [ble]
 enabled = true

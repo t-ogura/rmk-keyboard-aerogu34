@@ -164,13 +164,13 @@ tick 40 ms。
 - Cornix と共通のコード (`hfxo` / `status_led` / `build.rs` 補助 / `memory.x`)
   を支援 crate に抽出し、Cornix 側も差し替え
 - Vial からトラックボール設定（カスタムメニュー、または User キーでの CPI ± など）
-- BUILD_HASH を安定化して更新時にボンドを残す
 - `clear_layout = false` に戻す
 
 ## 8. fork に足したもの (Aerogu34 起点)
 
 | コミット | 内容 | 上流へ |
 | --- | --- | --- |
+| `9b59208e` feat(storage): keep BLE bonds across a firmware update | ハッシュ不一致の再初期化で BondInfo / ActiveBleProfile / PeerAddress を退避して書き戻す。`[storage] keep_bonds`（既定 true）。テスト付き | **出す**。全 BLE ユーザーの不満 |
 | `114881cb` feat(ble): expose is_profile_bonded() for user code | LED が「登録済みで待ち」と「未登録」を区別するための公開関数。`ProfileManager` の bond 一覧をビットマスクで鏡写し | 出す（小さい。広告 PR と一緒でも） |
 | `ad5cf4c0` feat(ble): fast advertising window before the slow interval | ホスト向け広告を最初の N 秒は 30 ms、その後 200 ms（`[ble] advertising_fast_interval_ms` / `advertising_slow_interval_ms` / `advertising_fast_timeout_secs`）。§9 | **出す**。MoErgo の RMK フォーク (colonelpanic8/moergo-rmk) も同じ 3 キー名で同じことをしている |
 | `b93572ca` feat(pointing): optional deadzone on PointingDevice | `PointingDevice` にデッドゾーン（バーストの合計が `threshold` に達するまで報告しない、`timeout` 無動作でリセット）。paw3222 / pmw3610 / pmw33xx の `deadzone_threshold` / `deadzone_timeout_ms`。ZMK の `zmk-input-processor-deadzone` と同じ意味論 | 出す価値あり。`pr/pointing-deadzone` に切り出し予定（Cornix `docs/UPSTREAM_PRS.md` の流儀） |
