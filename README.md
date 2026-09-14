@@ -13,8 +13,19 @@ Aerogu34 ファームウェアです。ZMK 版
 
 ## 状態
 
-実機で**キー入力と Vial** を確認済み (2026-09-14)。トラックボール・BLE ホスト
-接続・バッテリ表示は確認中。`docs/DESIGN.md` に設計と進捗があります。
+実機で確認済み: 全キー、Vial、トラックボール（カーソル / オートマウスレイヤ /
+スクロール）、BLE ホスト接続とプロファイル切替、LED。未確認: バッテリ残量の
+表示。設計と進捗は [docs/DESIGN.md](docs/DESIGN.md)。
+
+**ZMK 版との違いで知っておくこと**
+
+- **ファームウェアを更新するとホストとの再ペアリングが必要です。** RMK は
+  ビルドごとに変わるハッシュで設定領域の互換性を判定し、違えば全消去します
+  （左右のペアリングは自動で復旧、ホスト側のボンドは消える）。RMK の仕様です。
+- ZMK 版とは BLE アドレスが違うので、ホストには「Aerogu34」が 2 つ並びます。
+  RMK 版に落ち着いたら ZMK 版のほうをホストから削除してください。
+- プロファイル切替後の再接続に数秒かかります（後述）。
+- ZMK Studio / DYA Studio は使えません。キーマップは Vial で編集します。
 
 ## 書き込み (フラッシュ)
 
@@ -89,16 +100,18 @@ ZMK との違い:
 ### Vial
 
 右半分を USB で繋いで [Vial](https://get.vial.today/) を開けば、そのまま
-編集できます（`insecure = true` なのでアンロック操作は不要）。
+編集できます（`insecure = true` なのでアンロック操作は不要）。編集は
+フラッシュに保存され再起動後も残りますが、**ファームウェアを更新すると
+`keyboard.toml` の内容に戻ります**（設定領域が初期化されるため）。
 
-**注意**: 現状 `[storage] clear_layout = true` のため、Vial での編集は
-**再起動すると `keyboard.toml` の内容に戻ります**。キーマップを
-`keyboard.toml` で確定させたら `false` にしてください。
+## 入手
+
+- [Releases](https://github.com/t-ogura/rmk-keyboard-aerogu34/releases) —
+  タグごとの UF2（推奨）
+- [firmware/](firmware/) — main の最新ビルド
+- [GitHub Actions](../../actions) — push ごとの Artifacts `firmware`
 
 ## ソースからビルドする
-
-push のたびに [GitHub Actions](.github/workflows/build.yml) が両方の UF2 を
-ビルドして Artifacts `firmware` に置きます。`firmware/` の UF2 も同じものです。
 
 RMK 本体は PAW3222 ドライバとデッドゾーンを含む
 [t-ogura/rmk](https://github.com/t-ogura/rmk) の `paw3222` ブランチに
@@ -114,6 +127,7 @@ cargo binstall flip-link cargo-binutils cargo-hex-to-uf2
 # nrf-sdc / nrf-mpsl のビルドに libclang が要る (Ubuntu: apt install libclang-dev)
 
 ./package.sh              # -> firmware/aerogu34_{right,left}.uf2
+./package.sh --dev        # keyboard.toml のキーマップ変更を rmk の再ビルド無しで反映（下記）
 ./package.sh --host rynk  # Vial の代わりに RMK 純正の Rynk (https://gui.rmk.rs/)
 ./package.sh --log        # 右半分の RMK ログを USB シリアルに出す診断ビルド
 ```
@@ -126,9 +140,11 @@ cargo binstall flip-link cargo-binutils cargo-hex-to-uf2
 - **`[keyboard] name` / `product_name` は 22 バイト以下**。超えると BLE
   スタックが起動時に panic し、USB も何も出ない「完全な沈黙」になります
   （`build.rs` がビルドで止めます）。
-- `keyboard.toml` のキーマップだけ変えた場合、`clear_layout = true` でないと
-  **フラッシュしても前のキーマップのまま**になります（RMK はビルドハッシュが
-  変わらないと読み直さない）。
+- `keyboard.toml` のキーマップだけ変えて手元でビルドすると、**フラッシュしても
+  前のキーマップのまま**になります（RMK は rmk crate のビルド時に決まる
+  ハッシュが変わらないと読み直さない）。`./package.sh --dev` は
+  `clear_layout = true` にして毎起動時に上書きさせます（Vial の編集は残らない）。
+  CI のようなクリーンビルドではこの問題は起きません。
 - 両側とも Xiao BLE なので `memory.x` は 1 つ、フラッシュ先を間違える事故は
   ありません。
 

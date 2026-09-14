@@ -7,6 +7,8 @@
 #   ./package.sh --host rynk     Rynk build                -> firmware/rynk/
 #   ./package.sh --host both     both
 #   ./package.sh --log           right half with RMK's log on a USB serial port -> .../log/
+#   ./package.sh --dev           clear_layout = true: keyboard.toml keymap edits reach the
+#                                board without an rmk rebuild (Vial edits then do not persist)
 #
 # Vial and Rynk are mutually exclusive rmk features, and rmk-macro insists that
 # `[host]` in keyboard.toml agrees with the feature. The Rynk build therefore
@@ -25,11 +27,13 @@ if [ -z "${LIBCLANG_PATH:-}" ] && [ -d "$HOME/.local/opt/libclang/usr/lib/llvm-1
 fi
 HOST=vial
 LOG=0
+DEV=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
     --log) LOG=1; shift ;;
-    *) echo "usage: $0 [--host vial|rynk|both] [--log]" >&2; exit 2 ;;
+    --dev) DEV=1; shift ;;
+    *) echo "usage: $0 [--host vial|rynk|both] [--log] [--dev]" >&2; exit 2 ;;
   esac
 done
 STORAGE=$(python3 -c "import tomllib;print(tomllib.load(open('keyboard.toml','rb'))['storage']['start_addr'])")
@@ -40,13 +44,16 @@ build_one() { # $1 = vial | rynk
   toml="$tmp/keyboard.toml"
   # A copy of keyboard.toml with `[host]` flipped for Rynk. `[host]` ends at
   # the next table header.
-  python3 - keyboard.toml "$toml" "$flavour" <<'PY'
+  python3 - keyboard.toml "$toml" "$flavour" "$DEV" <<'PY'
 import re, sys
-src, dst, flavour = sys.argv[1:]
+src, dst, flavour, dev = sys.argv[1:]
 s = open(src, encoding="utf-8").read()
 if flavour == "rynk":
     s, n = re.subn(r"(?ms)^\[host\]\n.*?(?=^\[)", "[host]\nvial_enabled = false\nrynk_enabled = true\ninsecure = true\n\n", s)
     assert n == 1, "expected exactly one [host] block"
+if dev == "1":
+    s, n = re.subn(r"(?m)^clear_layout = false$", "clear_layout = true", s)
+    assert n == 1, "expected exactly one clear_layout"
 open(dst, "w", encoding="utf-8").write(s)
 PY
   export KEYBOARD_TOML_PATH="$toml"

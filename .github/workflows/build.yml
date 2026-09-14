@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "keyboard.toml"
       - "vial.json"
@@ -10,6 +11,7 @@ on:
       - "src/**"
       - "build.rs"
       - "Cargo.toml"
+      - "Cargo.lock"
       - "package.sh"
       - ".github/workflows/build.yml"
   pull_request:
@@ -44,3 +46,12 @@ jobs:
         with:
           name: firmware
           path: firmware/*.uf2
+
+      # A tag `vX.Y.Z` publishes the same two files as a GitHub Release.
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Aerogu34 RMK ${{ github.ref_name }}
+          files: firmware/*.uf2
+          generate_release_notes: true

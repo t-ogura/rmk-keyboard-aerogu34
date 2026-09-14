@@ -108,16 +108,15 @@ enabled = true
 # package.sh refuses to package an image that reaches this address.
 start_addr = 0xE4000
 num_sectors = 8
-# Rewrite the keymap and behavior config from this file on every boot.
-#
-# Without it a keymap change here silently does nothing: RMK only reads the
-# keymap out of keyboard.toml when its stored BUILD_HASH differs, and that
-# hash comes from the rmk crate's build.rs, which cargo does not rerun when
-# only keyboard.toml changes. `clear_layout` (not `clear_storage`) overwrites
-# the layout items in place without erasing the sector, so BLE bonds and the
-# paired half survive. The cost is that Vial edits do not persist across a
-# reboot -- set this back to false once the keymap here is final.
-clear_layout = true
+# Vial edits persist across reboots. RMK re-reads the keymap from this file
+# only when its stored BUILD_HASH differs from the firmware's, and that hash
+# is made by the rmk crate's build.rs from the commit and the build time --
+# so a clean build (CI, a release) always applies this file on first boot,
+# but a local rebuild after editing only keyboard.toml keeps the old keymap
+# in flash. `./package.sh --dev` flips this to `true` for that case: the
+# layout items are overwritten in place on every boot (bonds survive), at
+# the cost that Vial edits do not.
+clear_layout = false
 
 [ble]
 enabled = true
