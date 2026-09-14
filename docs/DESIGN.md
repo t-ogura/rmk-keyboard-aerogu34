@@ -151,9 +151,44 @@ ZMK の rgbled-widget にあった**起動時のバッテリ残量表示**は未
 
 | コミット | 内容 | 上流へ |
 | --- | --- | --- |
+| `ad5cf4c0` feat(ble): fast advertising window before the slow interval | ホスト向け広告を最初の N 秒は 30 ms、その後 200 ms（`[ble] advertising_fast_interval_ms` / `advertising_slow_interval_ms` / `advertising_fast_timeout_secs`）。§9 | **出す**。MoErgo の RMK フォーク (colonelpanic8/moergo-rmk) も同じ 3 キー名で同じことをしている |
 | `b93572ca` feat(pointing): optional deadzone on PointingDevice | `PointingDevice` にデッドゾーン（バーストの合計が `threshold` に達するまで報告しない、`timeout` 無動作でリセット）。paw3222 / pmw3610 / pmw33xx の `deadzone_threshold` / `deadzone_timeout_ms`。ZMK の `zmk-input-processor-deadzone` と同じ意味論 | 出す価値あり。`pr/pointing-deadzone` に切り出し予定（Cornix `docs/UPSTREAM_PRS.md` の流儀） |
 
 なぜドライバ (paw3222.rs) ではなく `PointingDevice` か: 静止時の迷いカウントは
 センサ共通の性質で、オートマウスレイヤ側の `threshold` はレポート単位
 （125 Hz なら 8 ms 分）なのでノイズを弾く値にすると遅い動きの出だしも弾く。
 ZMK と同じく「バーストの累積」で判定するにはレポート生成の直前が正しい場所。
+
+## 9. BLE プロファイル切替が遅い（2026-09-14 調査）
+
+**症状**: `BT0..4` で切替後、接続完了まで体感 20 秒弱。ZMK は直近に繋いだ
+ホストなら 1 秒未満。
+
+**結論: RMK の仕様（設計）が主因で、我々の設定ミスではない。ただし短縮はできる。**
+
+| | ZMK | RMK (0.9 / main) |
+| --- | --- | --- |
+| ホスト接続数 | **複数同時**（`CONFIG_BT_MAX_CONN=6`）。切替は「レポートの送り先を変えるだけ」で、繋いだままのホストなら即座 | **1 本**。`update_profile` が返ると `disconnect(&conn)` で旧ホストを切り、広告し直して新ホストの再接続を待つ (`rmk/src/ble/mod.rs` connection_loop) |
+| 切替時の広告 | 100〜150 ms (`BT_GAP_ADV_FAST_INT_*_2`)、undirected | **200 ms 固定**、undirected (`adv.rs` "A host link can afford a slow interval") |
+| 旧ホストの再接続 | 繋いだまま | 旧ホストが広告を見て再接続してくる → 「profile が違う」で切断 → 再広告、を新ホストが割り込めるまで繰り返す可能性 |
+
+つまり RMK では切替 = 必ず「切断 → 広告 → ホスト側のバックグラウンドスキャンが
+広告を拾う → 再接続 → 暗号化」。所要時間はホストのスキャン周期 × 広告間隔で
+決まり、200 ms ならホスト次第で 10〜20 秒になる。
+
+**やったこと**: fork `ad5cf4c0` で広告を 2 段階に（30 ms × 30 s → 200 ms）。
+広告間隔に比例して短くなるので、20 秒弱 → 数秒の見込み。
+
+**やれないこと / 残る差**:
+- directed advertising（旧ホストを締め出し、新ホストだけに宛てる）と
+  filter accept list は、trouble-host に resolving list が無いため RPA を使う
+  ホスト（Windows / macOS / iOS / Android 全部）には効かない。ZMK も同じ理由で
+  directed を無効にしている (`ble.c` の "Need to fix directed advertising for
+  privacy centrals")
+- ZMK 同等（<1 秒）にするには **複数ホスト同時接続**が必要。trouble-host 自体は
+  複数接続を持てる (`CONNECTIONS_MAX`) が、RMK の `serve_keyboard_connection`
+  は 1 本前提。上流に issue を立てる価値がある大きめの設計変更
+
+**まだ確認していないこと**: 旧ホストの再接続争いが実際にどれだけ効いているか。
+`./package.sh --log` の右ファームで切替時に
+`connected peer doesn't match the active profile` が何回出るかを見れば分かる。

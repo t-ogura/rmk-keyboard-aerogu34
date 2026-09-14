@@ -39,7 +39,7 @@ usb_log = ["rmk/usb_log", "dep:log"]
 # ~/workspace/aerogu34/.cargo/config.toml:
 #   [patch."https://github.com/t-ogura/rmk"]
 #   rmk = { path = "/path/to/rmk/rmk" }
-rmk = { git = "https://github.com/t-ogura/rmk", rev = "b93572cad77bc69a5ed611c8419a6d1f82127312", default-features = false, features = [
+rmk = { git = "https://github.com/t-ogura/rmk", rev = "ad5cf4c0c75b20f09d466d0d124c8b981f3b1588", default-features = false, features = [
     "storage",
     # If a hang ever returns, the watchdog turns it into a reboot loop, and
     # the status LED shows blue for the first three seconds of the next boot.

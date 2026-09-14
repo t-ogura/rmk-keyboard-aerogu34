@@ -125,6 +125,15 @@ enabled = true
 # defaults advertising to +8 dBm regardless of the controller setting; the
 # fork makes advertising follow this value too.
 default_tx_power = 0
+# Host advertising after boot, a disconnect or a profile switch: 30 ms for the
+# first 30 s, then 200 ms. The fast burst is what lets a bonded host find the
+# keyboard within a second or two; RMK's plain 200 ms took ~20 s on a profile
+# switch. Note RMK holds one host link at a time and drops it on a switch,
+# where ZMK keeps every bonded host connected -- so a switch is always a
+# reconnect here, and its speed is bounded by the host's own scan cadence.
+advertising_fast_interval_ms = 30
+advertising_slow_interval_ms = 200
+advertising_fast_timeout_secs = 30
 
 [host]
 vial_enabled = true
