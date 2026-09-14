@@ -22,6 +22,13 @@
 //! Green for 2 s when the other half connects, red for 2 s when it drops.
 //! Solid, so it never reads as the host's breathing red.
 //!
+//! # Battery (both halves, their own cell)
+//!
+//! On the first reading after boot, 2 s of green (40 % and up), yellow
+//! (20-39 %) or red (below 20 %) -- rgbled-widget's thresholds. After that
+//! the LED stays quiet about the battery unless the level drops below 10 %,
+//! when each further drop gets a short red blink.
+//!
 //! # Boot: why did it reset?
 //!
 //! For the first ~3 seconds the LED reports `POWER.RESETREAS`, which the
@@ -49,10 +56,11 @@
 //!
 //! The right half learns about the split link from
 //! `PeripheralConnectedEvent` and the host from `ConnectionStatusChangeEvent`;
-//! the left half from `CentralConnectedEvent`. The connected-event channels
-//! are generated with one subscriber slot and nothing else in this build
-//! takes them; `connection_status_change` has its base count raised to 2 in
-//! `keyboard.toml` for this subscriber. Watch that budget before adding a
+//! the left half from `CentralConnectedEvent`; both read their own cell from
+//! `BatteryStatusEvent`. The connected-event channels are generated with one
+//! subscriber slot and nothing else in this build takes them;
+//! `connection_status_change` and `battery_status` have their base counts
+//! raised in `keyboard.toml` for these subscribers. Watch that budget before adding a
 //! subscription: overrunning it panics at startup, which on this firmware
 //! means a board that never enumerates.
 
@@ -60,8 +68,9 @@ use embassy_nrf::Peri;
 use embassy_nrf::gpio::{AnyPin, Level};
 use embassy_nrf::pac;
 use embassy_nrf::pwm::{DutyCycle, Instance, SimpleConfig, SimplePwm};
-use rmk::event::{CentralConnectedEvent, ConnectionStatusChangeEvent, PeripheralConnectedEvent};
+use rmk::event::{BatteryStatusEvent, CentralConnectedEvent, ConnectionStatusChangeEvent, PeripheralConnectedEvent};
 use rmk::macros::processor;
+use rmk::types::battery::BatteryStatus;
 use rmk::types::ble::{BleState, BleStatus};
 
 /// Tick period. Fine enough for the breathing ramp; the processor idles
@@ -84,6 +93,11 @@ const FAST_BLINK_TICKS: u32 = ticks(100);
 const CODE_BLINK_TICKS: u32 = ticks(500);
 /// Breathing period.
 const BREATHE_TICKS: u32 = ticks(2000);
+/// Battery bands, in percent: green at or above HIGH, yellow at or above LOW,
+/// red below; a drop below CRITICAL blinks.
+const BATTERY_HIGH: u8 = 40;
+const BATTERY_LOW: u8 = 20;
+const BATTERY_CRITICAL: u8 = 10;
 
 /// PWM resolution: 1 MHz / 1000 = 1 kHz, above flicker.
 const MAX_DUTY: u16 = 1000;
@@ -214,14 +228,18 @@ impl XiaoRgb {
     }
 }
 
-/// The display logic shared by both halves: three slots by priority, each
+/// The display logic shared by both halves: four slots by priority, each
 /// holding at most one pattern.
 struct Display {
     led: XiaoRgb,
     tick: u32,
     boot: Option<Pattern>,
+    battery: Option<Pattern>,
     host: Option<Pattern>,
     link: Option<Pattern>,
+    /// The last battery level seen, so only the first reading and later
+    /// critical drops light the LED.
+    battery_level: Option<u8>,
 }
 
 impl Display {
@@ -271,8 +289,10 @@ impl Display {
             led,
             tick: 0,
             boot,
+            battery: None,
             host: None,
             link: None,
+            battery_level: None,
         };
         d.apply();
         d
@@ -295,7 +315,7 @@ impl Display {
 
     fn apply(&mut self) {
         let tick = self.tick;
-        for slot in [&mut self.boot, &mut self.host, &mut self.link] {
+        for slot in [&mut self.boot, &mut self.battery, &mut self.host, &mut self.link] {
             if let Some(p) = *slot {
                 if tick >= p.until {
                     *slot = None;
@@ -337,6 +357,33 @@ impl Display {
         self.apply();
     }
 
+    /// Own battery: the first reading after boot in rgbled-widget's bands,
+    /// then only critical drops.
+    fn battery_status(&mut self, status: BatteryStatus) {
+        let BatteryStatus::Available { level: Some(level), .. } = status else {
+            return;
+        };
+        let start = self.next_start();
+        match self.battery_level {
+            None => {
+                let rgb = if level >= BATTERY_HIGH {
+                    GREEN
+                } else if level >= BATTERY_LOW {
+                    YELLOW
+                } else {
+                    RED
+                };
+                Self::show(&mut self.battery, start, rgb, Kind::Solid, SOLID_TICKS);
+            }
+            Some(prev) if level < BATTERY_CRITICAL && level < prev => {
+                Self::show(&mut self.battery, start, RED, Kind::Blink { half: FAST_BLINK_TICKS }, ticks(600));
+            }
+            _ => {}
+        }
+        self.battery_level = Some(level);
+        self.apply();
+    }
+
     /// The split link came or went.
     fn link_status(&mut self, linked: bool) {
         let start = self.next_start();
@@ -352,7 +399,7 @@ impl Display {
 /// Right half (central): the split link is the peripheral's connection, and
 /// the host link is its own.
 #[allow(dead_code)]
-#[processor(subscribe = [PeripheralConnectedEvent, ConnectionStatusChangeEvent], poll_interval = 40)]
+#[processor(subscribe = [PeripheralConnectedEvent, ConnectionStatusChangeEvent, BatteryStatusEvent], poll_interval = 40)]
 pub struct CentralStatusLed {
     display: Display,
     /// The last host BLE status seen, so only real changes are announced
@@ -386,11 +433,15 @@ impl CentralStatusLed {
         self.ble = Some(ble);
         self.display.host_status(ble);
     }
+
+    async fn on_battery_status_event(&mut self, event: BatteryStatusEvent) {
+        self.display.battery_status(event.0);
+    }
 }
 
 /// Left half (peripheral): the link is the central's connection.
 #[allow(dead_code)]
-#[processor(subscribe = [CentralConnectedEvent], poll_interval = 40)]
+#[processor(subscribe = [CentralConnectedEvent, BatteryStatusEvent], poll_interval = 40)]
 pub struct PeripheralStatusLed {
     display: Display,
 }
@@ -407,5 +458,9 @@ impl PeripheralStatusLed {
 
     async fn on_central_connected_event(&mut self, event: CentralConnectedEvent) {
         self.display.link_status(event.connected);
+    }
+
+    async fn on_battery_status_event(&mut self, event: BatteryStatusEvent) {
+        self.display.battery_status(event.0);
     }
 }

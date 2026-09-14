@@ -336,6 +336,11 @@ subs = 4
 [event.connection_status_change]
 subs = 2
 
+# The status LED on each half also subscribes to its own battery status, on
+# top of the BLE battery service's and the split link's subscribers.
+[event.battery_status]
+subs = 1
+
 [event.layer_change]
 subs = 3
 # Two layer changes land back to back when the scroll layer is pressed (the

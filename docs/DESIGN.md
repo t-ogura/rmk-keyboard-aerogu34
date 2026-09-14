@@ -163,7 +163,8 @@ tick 40 ms。
 
 - Cornix と共通のコード (`hfxo` / `status_led` / `build.rs` 補助 / `memory.x`)
   を支援 crate に抽出し、Cornix 側も差し替え
-- LED: バッテリ残量
+- Vial からトラックボール設定（カスタムメニュー、または User キーでの CPI ± など）
+- BUILD_HASH を安定化して更新時にボンドを残す
 - `clear_layout = false` に戻す
 
 ## 8. fork に足したもの (Aerogu34 起点)
