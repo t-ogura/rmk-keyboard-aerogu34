@@ -17,6 +17,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# The release step creates a GitHub Release; the default token is read-only.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
