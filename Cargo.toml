@@ -1,0 +1,108 @@
+[package]
+name = "rmk-keyboard-aerogu34"
+version = "0.1.0"
+authors = ["Tadashi Ogura <heace9@gmail.com>"]
+description = "RMK firmware for the Aerogu34 split keyboard (Seeed Xiao BLE x2, PAW3222 trackball)"
+repository = "https://github.com/t-ogura/rmk-keyboard-aerogu34"
+edition = "2024"
+license = "MIT"
+
+# Host configurator protocol -- exactly one. RMK's `vial` and `rynk` features
+# conflict, and rmk-macro checks the choice against `[host]` in keyboard.toml
+# at build time, so package.sh pairs each feature with a matching toml
+# (`./package.sh --host rynk` swaps the `[host]` block into a temporary copy).
+#
+# `host_lock` rides along with `vial`: it is what `[host] insecure` and Vial's
+# locked features (Matrix Tester, tap-dance saving) need, and `rynk` already
+# implies it.
+[features]
+default = ["vial", "defmt"]
+vial = ["rmk/vial", "rmk/host_lock"]
+rynk = ["rmk/rynk"]
+# Logging backend -- exactly one. `defmt` is RTT (needs a debug probe;
+# effectively silent on a Xiao). `usb_log` puts RMK's log on a USB serial port
+# next to the HID interfaces (`package.sh --log`), ~100 KB bigger.
+defmt = ["rmk/defmt"]
+usb_log = ["rmk/usb_log", "dep:log"]
+
+[dependencies]
+# t-ogura/rmk `paw3222`: upstream main at 4e432b4 (2026-09-11) plus the
+# PAW3222 driver this trackball needs and a set of fixes, each also carried
+# as a topic branch for upstream (pr/*). RMK has drivers for PMW3610 / PMW33xx
+# / IQS5XX but not the PAW3222, and a sensor driver cannot live in this
+# crate: only the `[[input_device.*]]` codegen path in rmk-macro can wire a
+# sensor into the PointingProcessor, and it knows a fixed set of sensors.
+#
+# Pinned to a commit for reproducible builds. To work on the fork itself,
+# override the source with a `[patch]` in a .cargo/config.toml *outside* this
+# repository (cargo reads config from every parent directory), e.g.
+# ~/workspace/aerogu34/.cargo/config.toml:
+#   [patch."https://github.com/t-ogura/rmk"]
+#   rmk = { path = "/path/to/rmk/rmk" }
+rmk = { git = "https://github.com/t-ogura/rmk", rev = "b93572cad77bc69a5ed611c8419a6d1f82127312", default-features = false, features = [
+    "storage",
+    # If a hang ever returns, the watchdog turns it into a reboot loop, and
+    # the status LED shows blue for the first three seconds of the next boot.
+    "watchdog",
+    "split",
+    "async_matrix",
+    "nrf52840_ble",
+    "adafruit_bl",
+] }
+nrf-sdc = { version = "0.4.0", features = ["defmt", "peripheral", "central", "nrf52840"] }
+nrf-mpsl = { version = "0.4.0", features = ["defmt", "critical-section-impl", "nrf52840"] }
+bt-hci = { version = "0.10", features = ["defmt"] }
+
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.5"
+embassy-time = { version = "0.5", features = ["tick-hz-32_768", "defmt"] }
+embassy-nrf = { version = "0.11", features = [
+    "defmt",
+    "nrf52840",
+    "time-driver-rtc1",
+    "gpiote",
+    "unstable-pac",
+    # P0.09 (trackball CS) and P0.10 (matrix column 4) are the NFC pads.
+    "nfc-pins-as-gpio",
+    "time",
+] }
+embassy-executor = { version = "0.10", features = ["defmt", "platform-cortex-m", "executor-thread"] }
+defmt = "1"
+defmt-rtt = "1"
+log = { version = "0.4", optional = true }
+panic-probe = { version = "1", features = ["print-defmt"] }
+static_cell = "2"
+
+[build-dependencies]
+xz2 = "0.1.7"
+json = "0.12"
+const-gen = "1.6"
+
+# Right half: split central -- USB and host BLE, the trackball, the keymap.
+[[bin]]
+name = "right"
+path = "src/right.rs"
+test = false
+bench = false
+
+# Left half: split peripheral id 0.
+[[bin]]
+name = "left"
+path = "src/left.rs"
+test = false
+bench = false
+
+[profile.dev]
+codegen-units = 1
+debug = true
+opt-level = 1
+overflow-checks = true
+lto = false
+panic = 'unwind'
+
+[profile.release]
+codegen-units = 1
+debug = true            # no overhead for bare-metal
+opt-level = "z"         # optimize for binary size
+overflow-checks = false
+lto = "fat"

@@ -1,0 +1,354 @@
+# Aerogu34 -- RMK split: right half (central, trackball) + left half
+# (peripheral). Both halves are Seeed Xiao BLEs. Shared by both binaries via
+# KEYBOARD_TOML_PATH (.cargo/config.toml).
+#
+# DEVICE NAME MUST BE <= 22 BYTES. RMK passes it into
+# Server::new_with_config(...).unwrap() and trouble-host rejects anything
+# longer, which panics before USB enumerates and leaves the board looking
+# completely dead. build.rs enforces it.
+
+[keyboard]
+name = "Aerogu34"
+product_name = "Aerogu34"
+vendor_id = 0x4f47
+product_id = 0xa034
+manufacturer = "t-ogura"
+chip = "nrf52840"
+
+# Both halves are Xiao BLEs, which carry the inductor for the nRF52840's REG1
+# DC-DC converter (Zephyr's xiao_ble devicetree enables it, and the ZMK builds
+# this keyboard ran had CONFIG_BOARD_ENABLE_DCDC=y). It cuts radio current by
+# roughly a third. REG0 stays an LDO: the Xiao does not fit REG0's inductor.
+[chip.nrf52840]
+dcdc_reg1 = true
+
+# Unified matrix, 4 rows x 10 cols: left half cols 0-4, right half cols 5-9 --
+# the same (row, col) numbering as the ZMK shield's matrix transform and the
+# DYA Studio layout JSON (zmk-keyboard-aerogu34/config/aerogu34.json), so a key
+# has one name across both firmwares.
+#
+# Both halves are the same PCB, so each half's column 0 sits at its inner
+# edge: read left to right, the top row is left cols 4..0, then right cols
+# 5..9. Row 3 holds the four thumb keys (left cols 1,0; right cols 5,6).
+[layout]
+rows = 4
+cols = 10
+map = """
+(0,4) (0,3) (0,2) (0,1) (0,0) [3] (0,5) (0,6) (0,7) (0,8) (0,9)
+(1,4) (1,3) (1,2) (1,1) (1,0) [3] (1,5) (1,6) (1,7) (1,8) (1,9)
+(2,4) (2,3) (2,2) (2,1) (2,0) [3] (2,5) (2,6) (2,7) (2,8) (2,9)
+[3.5] (3,1) (3,0) [2] (3,5) (3,6)
+"""
+
+[keymap]
+layers = 5
+
+# Transcribed from zmk-keyboard-aerogu34/config/aerogu34.keymap, layer for
+# layer. Each `keys` line is one physical row in the order of `[layout] map`
+# above, so it reads like the keyboard.
+
+[[keymap.layer]]
+name = "base"
+keys = """
+Q W E R T  Y U I O P
+MT(A, LCtrl, HRM) S LT(3, D, HRM) F G  H J LT(3, K, HRM) L MT(Minus, RCtrl, HRM)
+MT(Z, LShift, HRM) MT(X, LGui, HRM) MT(C, LAlt, HRM) V B  N M MT(Comma, RAlt, HRM) MT(Dot, RGui, HRM) MT(Slash, RShift, HRM)
+LT(1, Space, THUMB) LT(3, Grave, THUMB)  Backspace LT(2, Enter, THUMB)
+"""
+
+[[keymap.layer]]
+name = "function"
+keys = """
+F1 F2 F3 F4 F5  F6 F7 F8 F9 F10
+@jp_colon @excl Slash @jp_lparen @jp_lbracket  @jp_under MouseBtn1 Up MouseBtn2 F11
+Semicolon @qmark @jp_yen @jp_rparen @jp_rbracket  @jp_at Left Down Right F12
+_ _  _ _
+"""
+
+# US keycodes where the ZMK keymap uses them directly (RIGHT_BRACKET, RPAR,
+# RIGHT_BRACE, COLON, EQUAL, MINUS) and the JP aliases where it uses its JP_
+# defines (JP_PLUS) -- transcribed as written so both firmwares type the same.
+[[keymap.layer]]
+name = "num"
+keys = """
+Tab Kc7 Kc8 Kc9 Minus  RightBracket _ MouseBtn3 _ Escape
+Dot Kc4 Kc5 Kc6 @jp_plus  SHIFTED(Kc0) MouseBtn1 Up MouseBtn2 SHIFTED(Semicolon)
+Kc0 Kc1 Kc2 Kc3 Equal  SHIFTED(RightBracket) Left Down Right Slash
+Escape Delete  Language1 _
+"""
+
+# `&studio_unlock` (left home-row outer key) has no RMK equivalent; that
+# position is transparent here. User0..User4 select BLE profile 0..4 (see
+# [rmk] ble_profiles_num).
+[[keymap.layer]]
+name = "scroll"
+keys = """
+User0 User1 User2 User3 User4  WM(Left, LGui|LCtrl) WM(Tab, LGui) MouseBtn3 _ WM(Right, LGui|LCtrl)
+_ _ _ _ _  MouseBtn4 MouseBtn1 Up MouseBtn2 MouseBtn5
+_ _ _ _ _  _ Left Down Right _
+_ _  _ _
+"""
+
+[[keymap.layer]]
+name = "mouse"
+keys = """
+_ _ _ _ _  _ _ MouseBtn3 _ _
+_ _ _ _ _  _ MouseBtn1 _ MouseBtn2 _
+_ _ _ _ _  _ _ _ _ _
+_ _  _ _
+"""
+
+[storage]
+enabled = true
+# RMK's nRF default puts the storage sectors at 0xA0000, inside the space a
+# large image can grow into (the Cornix TB central reached 0xAC500 with USB
+# logging on, and storage initialisation then erased 32 KB of the running
+# program). Keep them at the top of the application region, right below the
+# bootloader's pages: app 0x27000..0xEC000 (memory.x) -> 0xE4000..0xEC000.
+# package.sh refuses to package an image that reaches this address.
+start_addr = 0xE4000
+num_sectors = 8
+# Rewrite the keymap and behavior config from this file on every boot.
+#
+# Without it a keymap change here silently does nothing: RMK only reads the
+# keymap out of keyboard.toml when its stored BUILD_HASH differs, and that
+# hash comes from the rmk crate's build.rs, which cargo does not rerun when
+# only keyboard.toml changes. `clear_layout` (not `clear_storage`) overwrites
+# the layout items in place without erasing the sector, so BLE bonds and the
+# paired half survive. The cost is that Vial edits do not persist across a
+# reboot -- set this back to false once the keymap here is final.
+clear_layout = true
+
+[ble]
+enabled = true
+# 0 dBm: the halves sit centimetres apart and the host within a metre. RMK
+# defaults advertising to +8 dBm regardless of the controller setting; the
+# fork makes advertising follow this value too.
+default_tx_power = 0
+
+[host]
+vial_enabled = true
+rynk_enabled = false
+insecure = true
+
+[split]
+connection = "ble"
+
+# --- RIGHT half = central (USB, host BLE, trackball), cols 5-9 --------------
+# Pins from zmk-keyboard-aerogu34/boards/shields/aerogu34/aerogu34.dtsi, in
+# nRF52840 port.pin form. Xiao BLE header: D0 P0.02, D1 P0.03, D2 P0.28,
+# D3 P0.29, D4 P0.04, D5 P0.05, D6 P1.11, D7 P1.12, D8 P1.13, D9 P1.14,
+# D10 P1.15. P0.09 / P0.10 are the NFC pads, used as GPIO (nfc-pins-as-gpio).
+[split.central]
+rows = 4
+cols = 5
+row_offset = 0
+col_offset = 5
+# Battery voltage on the Xiao: P0.31 reads the cell through an on-board
+# divider (510 k over 1.51 M total) that only conducts while P0.14 is driven
+# low.
+battery_adc_pin = "P0_31"
+adc_divider_measured = 510
+adc_divider_total = 1510
+battery_user_description = "Right"
+
+# Diodes: col2row (ZMK `diode-direction = "col2row"`), RMK's default --
+# columns driven, rows read with pull-downs.
+[split.central.matrix]
+matrix_type = "normal"
+row_pins = ["P0_03", "P0_28", "P0_29", "P1_11"]
+col_pins = ["P1_15", "P1_14", "P1_13", "P1_12", "P0_10"]
+
+# The battery divider's enable (see battery_adc_pin above): active low, and
+# held active from boot so the first reading is valid.
+[[split.central.output]]
+pin = "P0_14"
+low_active = true
+initial_state_active = true
+
+# The trackball, wired per the ZMK shield: SCK P0.05 (D5), SDIO P0.04 (D4),
+# CS P0.09 (NFC1), MOTION P0.02 (D0, active low with a pull-up).
+#
+# The PAW3222 is a single-wire (SDIO) half-duplex part, so `mosi` and `miso`
+# name the same pin and RMK drives it with a bit-banged bus (the ZMK overlay
+# pointed SPIM's MOSI and MISO at one pin).
+[[split.central.input_device.paw3222]]
+name = "trackball"
+id = 0
+spi = { instance = "bitbang0", sck = "P0_05", mosi = "P0_04", miso = "P0_04", cs = "P0_09" }
+motion = "P0_02"
+# ZMK: `res-cpi = <800>`. The sensor steps in 38s; 800 rounds to 798.
+cpi = 800
+# ZMK: `&zip_xy_transform (X_INVERT | Y_INVERT)` -- the sensor is mounted
+# rotated 180 degrees relative to the cursor. Done in the sensor's
+# MOUSE_OPTION register rather than the processor.
+invert_x = true
+invert_y = true
+# 125 Hz: what a BLE host drains at its connection interval. Higher rates
+# stall the pointer the moment the user switches off USB (Cornix TB, DESIGN
+# 7.9).
+report_hz = 125
+# Sleep stages on: ~0.25 mA in Run against 16 uA in Sleep1 and 7 uA in
+# Sleep2. 12-bit deltas keep the sleep windows from overflowing.
+force_awake = false
+# ZMK: `&deadzone_processor` (zmk-input-processor-deadzone, threshold 10,
+# timeout 300 ms) at the head of the chain. A resting sensor's stray counts
+# would otherwise raise the mouse layer; a burst of motion is reported only
+# once it has reached 10 counts, and a burst ends after 300 ms idle.
+deadzone_threshold = 10
+deadzone_timeout_ms = 300
+
+# --- LEFT half = peripheral id 0, cols 0-4 ---------------------------------
+# Same PCB as the right half, so the same pins.
+[[split.peripheral]]
+rows = 4
+cols = 5
+row_offset = 0
+col_offset = 0
+battery_adc_pin = "P0_31"
+adc_divider_measured = 510
+adc_divider_total = 1510
+battery_user_description = "Left"
+
+[split.peripheral.matrix]
+matrix_type = "normal"
+row_pins = ["P0_03", "P0_28", "P0_29", "P1_11"]
+col_pins = ["P1_15", "P1_14", "P1_13", "P1_12", "P0_10"]
+
+[[split.peripheral.output]]
+pin = "P0_14"
+low_active = true
+initial_state_active = true
+
+# Japanese (JIS) layout: the OS is set to a JP keyboard, so these are the US
+# keycodes that produce each JP symbol. Transcribed from the JP_* defines at
+# the top of zmk-keyboard-aerogu34/config/aerogu34.keymap.
+[aliases]
+jp_dquote    = "SHIFTED(Kc2)"              # "
+jp_ampersand = "SHIFTED(Kc6)"              # &
+jp_quote     = "SHIFTED(Kc7)"              # '
+jp_equal     = "SHIFTED(Minus)"            # =
+jp_caret     = "Equal"                     # ^
+jp_yen       = "International3"            # ¥   (ZMK used the raw 0x89)
+jp_plus      = "SHIFTED(Semicolon)"        # +
+jp_tilde     = "SHIFTED(Equal)"            # ~
+jp_pipe      = "SHIFTED(International3)"   # |
+jp_at        = "LeftBracket"               # @
+jp_colon     = "Quote"                     # :
+jp_asterisk  = "SHIFTED(Quote)"            # *
+jp_backquote = "SHIFTED(LeftBracket)"      # `
+jp_under     = "SHIFTED(International1)"   # _   (ZMK used the raw 0x87)
+jp_lbracket  = "RightBracket"              # [
+jp_rbracket  = "Backslash"                 # ]
+jp_lparen    = "SHIFTED(Kc8)"              # (
+jp_rparen    = "SHIFTED(Kc9)"              # )
+jp_lbrace    = "SHIFTED(RightBracket)"     # {
+jp_rbrace    = "SHIFTED(Backslash)"       # }
+jp_kana      = "Language1"                 # かな
+jp_eisu      = "Language2"                 # 英数
+jp_hanzen    = "Grave"                     # 半角/全角
+# Plain shifted keys the ZMK keymap uses directly.
+excl         = "SHIFTED(Kc1)"              # !
+qmark        = "SHIFTED(Slash)"            # ?
+
+# Five BLE profiles, matching the ZMK keymap's `&bt BT_SEL 0..4` on the scroll
+# layer. RMK exposes profile switching as User keycodes: User0..User4 select
+# a profile, User5 next, User6 previous, User7 clears the current profile's
+# bond (the `&bt BT_CLR` the ZMK combo used).
+[rmk]
+ble_profiles_num = 5
+# ZMK's CONFIG_ZMK_IDLE_TIMEOUT default. Any key, ball movement or host
+# activity wakes the central; while asleep the fork keeps a low-duty
+# reconnect scan running so a half switched on later joins by itself.
+split_central_sleep_timeout_seconds = 30
+
+# ZMK: `&zip_temp_layer 4 1000` on the trackball listener -- move the ball,
+# land on the mouse layer, fall back 1 s after the motion stops. RMK has this
+# built in.
+[[behavior.auto_mouse_layer]]
+device_id = 0
+target_layer = 4
+timeout = "1000ms"
+threshold = 1
+# Hands off while the scroll layer is held. ZMK got this for free: its
+# scroll processor was `active-layers = <BIT(3)>` and the temp-layer sat
+# before it in the chain, but RMK's auto mouse layer would otherwise stack
+# layer 4 on top of layer 3 at the first flick of the ball, replacing the
+# scroll layer's keymap and dropping the mode switch back to cursor.
+exclude_layers = [3]
+
+# Subscriber slots for the pointing pipeline. Base counts; RMK adds the slots
+# its own feature-gated tasks need on top. Overrunning a channel's reservation
+# panics at startup, which on this board means a firmware that never
+# enumerates, so the consumers are reserved explicitly.
+#
+# `pointing` +2: the generated PointingProcessor and the auto-mouse-layer
+# runner. `layer_change` +2: the auto-mouse-layer runner and the pointing-mode
+# controller (src/pointing_mode.rs) that switches to scroll on the scroll layer.
+[event.pointing]
+subs = 4
+
+# The status LED on the right half subscribes to host connection changes
+# (BLE profile switches, connect / disconnect) on top of the split driver's
+# own subscriber.
+[event.connection_status_change]
+subs = 2
+
+[event.layer_change]
+subs = 3
+# Two layer changes land back to back when the scroll layer is pressed (the
+# key activates it, the auto-mouse runner drops layer 4 in answer). With the
+# default size of 1 a subscriber that has not run yet sees only the last of
+# the burst.
+channel_size = 4
+
+# ZMK: `&mt { tapping-term-ms = <300>; flavor = "balanced"; }` and
+# `&lt { quick-tap-ms = <300>; }`. "balanced" resolves a tap-hold to its hold
+# when another key is pressed *and released* inside the term, which is RMK's
+# permissive_hold.
+[behavior.morse]
+# Defaults for any tap-hold key without a profile. Every MT/LT in the keymap
+# names a profile below, so these only matter for keys added later (Vial).
+enable_flow_tap = false
+permissive_hold = true
+hold_timeout = "300ms"
+gap_timeout = "300ms"
+
+# ZMK has two behaviours (&mt, &lt) where RMK has one table, so the two are
+# profiles here, named by what they do. The profile is the third parameter
+# of MT(...) / LT(...) in the keymap.
+[behavior.morse.profiles]
+# Home row (A/Z/X/C and mirrors, and the D/K layer-taps): ZMK's `balanced`
+# with the keymap's 300 ms term. The Cornix TB port of this same keymap
+# settled on 200 ms after the pure-hold latency (hold Ctrl, then click) felt
+# slow at 300; lower it here if it does too. `unilateral_tap = true` (needs
+# L/R hand markers in [layout] map) is the other cure for home-row misfires.
+HRM = { permissive_hold = true, hold_timeout = "300ms", gap_timeout = "300ms" }
+# Thumbs (Space / Grave / Enter layer-taps): hold as soon as any other key is
+# pressed. A thumb never rolls into a letter, so there is nothing to misfire,
+# and the layer is there on the very next key instead of after a timeout.
+# quick_tap: tap, then press again within 300 ms, repeats the tap -- ZMK's
+# `&lt { quick-tap-ms = <300>; }`, so "space space" stays two spaces.
+THUMB = { hold_on_other_press = true, hold_timeout = "300ms", gap_timeout = "300ms", quick_tap_timeout = "300ms" }
+
+# The ZMK keymap's combos. ZMK keys them on physical positions, RMK on the
+# keycodes at those positions, so each one is translated; the position
+# numbers below are the ZMK keymap's own 0-33 indices.
+[behavior.combo]
+timeout = "50ms"
+combos = [
+  # 11+12 = S+D -> Tab (base layer only, as in ZMK)
+  { actions = ["S", "LT(3, D, HRM)"], output = "Tab", layer = 0 },
+  # 12+13 = D+F -> Shift+Tab (every layer)
+  { actions = ["LT(3, D, HRM)", "F"], output = "WM(Tab, LShift)" },
+  # 20+21 = Z+X -> Gui, 20+22 = Z+C -> Alt (the modifiers the home row drops)
+  { actions = ["MT(Z, LShift, HRM)", "MT(X, LGui, HRM)"], output = "LGui" },
+  { actions = ["MT(Z, LShift, HRM)", "MT(C, LAlt, HRM)"], output = "LAlt" },
+  # 29+28 = /+. -> Gui, 29+27 = /+, -> Alt
+  { actions = ["MT(Slash, RShift, HRM)", "MT(Dot, RGui, HRM)"], output = "RGui" },
+  { actions = ["MT(Slash, RShift, HRM)", "MT(Comma, RAlt, HRM)"], output = "RAlt" },
+  # 0+4 on the scroll layer = BT profile 0 + profile 4 -> clear this bond
+  { actions = ["User0", "User4"], output = "User7", layer = 3 },
+  # 1+2+3 on the scroll layer -> bootloader
+  { actions = ["User1", "User2", "User3"], output = "Bootloader", layer = 3 },
+]

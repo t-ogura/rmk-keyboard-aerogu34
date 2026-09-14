@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "keyboard.toml"
+      - "vial.json"
+      - "memory.x"
+      - "src/**"
+      - "build.rs"
+      - "Cargo.toml"
+      - "package.sh"
+      - ".github/workflows/build.yml"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # bindgen (nrf-sdc-sys / nrf-mpsl-sys) needs libclang
+      - name: Install libclang
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+          components: llvm-tools
+
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Install build tools
+        run: cargo binstall -y flip-link cargo-binutils cargo-hex-to-uf2
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build and package
+        run: ./package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: firmware/*.uf2
