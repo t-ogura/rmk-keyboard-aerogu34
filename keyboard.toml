@@ -300,10 +300,18 @@ qmark        = "SHIFTED(Slash)"            # ?
 # bond (the `&bt BT_CLR` the ZMK combo used).
 [rmk]
 ble_profiles_num = 5
-# Headroom for Vial / Rynk users: the keymap's own eight combos would fill
-# RMK's default of 8, and morse (tap dance) entries default to 8.
-combo_max_num = 16
-morse_max_num = 16
+# Headroom for Vial / Rynk users, who cannot raise these without building
+# their own firmware: RMK's defaults of 8 would be filled by the keymap's own
+# eight combos. Measured on the right half, 48 each costs 3.8 KB of RAM out of
+# 256 KB, which is cheap next to that. The ceiling is 255; `combo_max_length`
+# (4) caps the keys in one combo.
+combo_max_num = 48
+morse_max_num = 48
+# Bytes for all macros together. Expensive in RAM for what it is -- the
+# storage buffer, the flash channel's messages and the macro cache are all
+# sized from it, so a byte here costs around 23: 256 -> 512 measured 5.9 KB.
+# Hence 512 rather than matching the combo headroom.
+macro_space_size = 512
 # ZMK's CONFIG_ZMK_IDLE_TIMEOUT default. Any key, ball movement or host
 # activity wakes the central; while asleep the fork keeps a low-duty
 # reconnect scan running so a half switched on later joins by itself.

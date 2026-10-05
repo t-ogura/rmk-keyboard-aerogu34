@@ -124,9 +124,9 @@ ZMK との違い:
 | --- | --- |
 | 8 レイヤ全部のキー配置 | レイヤ 0〜4 が初期キーマップ、**5〜7 は空き**。レイヤ数自体はビルド時に固定で、Vial / Rynk からは増やせない |
 | Mod-Tap / Layer-Tap の追加・変更 | Vial で作ったものは `[behavior.morse]` の既定値（300 ms、permissive hold）で動く |
-| コンボの編集 | 枠 16 個（初期キーマップが 8 個使用） |
-| タップダンス（RMK では "morse"） | 枠 16 個 |
-| マクロ | 全体で 256 バイト |
+| コンボの編集 | 枠 **48 個**（初期キーマップが 8 個使用） |
+| タップダンス（RMK では "morse"） | 枠 **48 個** |
+| マクロ | 全体で 512 バイト |
 | BLE プロファイルキー `BT0`〜`BT4` / `CLR_BT`、マウスボタン / ホイール | User キーコードとして選べる |
 | QMK Settings タブ: コンボのタイムアウト、タッピングターム、ワンショット、permissive hold | タッピングタームは**既定プロファイルにだけ**効く。ホームロウ Mod (HRM) と親指 (THUMB) は `keyboard.toml` の値のまま |
 
@@ -145,7 +145,8 @@ ZMK との違い:
 | スクロールレイヤの番号、スクロール速度・向き、カーソル倍率 | `src/pointing_mode.rs` | `SCROLL_LAYER` / `MOUSE_LAYER`、`SCROLL_MODE` の `divisor_x/y`（大きいほど遅い）と `invert_x/y`、`CURSOR_MODE` の `multiplier_x/y` |
 | ホームロウ Mod / 親指のタップホールド時間 | `keyboard.toml` `[behavior.morse.profiles]` | `HRM = { ..., hold_timeout = "300ms", gap_timeout = "300ms" }` / `THUMB = { ... }` |
 | レイヤ数（8 より増やす） | `keyboard.toml` `[keymap] layers` + `[[keymap.layer]]` を追加 | |
-| コンボ / タップダンスの枠 | `keyboard.toml` `[rmk]` | `combo_max_num = 16` / `morse_max_num = 16` |
+| コンボ / タップダンスの枠 | `keyboard.toml` `[rmk]` | `combo_max_num = 48` / `morse_max_num = 48`（上限 255。1 コンボのキー数は `combo_max_length`、既定 4） |
+| マクロの容量 | `keyboard.toml` `[rmk]` | `macro_space_size = 512`（バイト。RAM を 1 バイトあたり約 23 バイト消費する） |
 | BLE プロファイル数 | `keyboard.toml` `[rmk]` | `ble_profiles_num = 5`（Vial のカスタムキーは `vial.json` の `customKeycodes` も合わせる） |
 | 無操作からスリープまでの時間 | `keyboard.toml` `[rmk]` | `split_central_sleep_timeout_seconds = 30` |
 | 切替後の再接続の速さ / 消費電力 | `keyboard.toml` `[ble]` | `advertising_fast_interval_ms = 30` / `advertising_fast_timeout_secs = 30` |
