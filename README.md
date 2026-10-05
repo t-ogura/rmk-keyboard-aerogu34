@@ -122,7 +122,7 @@ ZMK との違い:
 
 | 項目 | 備考 |
 | --- | --- |
-| 8 レイヤ全部のキー配置 | レイヤ 0〜4 が初期キーマップ、**5〜7 は空き**。レイヤ数自体はビルド時に固定で、Vial / Rynk からは増やせない |
+| 8 レイヤ全部のキー配置 | レイヤ 0〜4 が初期キーマップ、**5〜7 は空き**。レイヤ数自体はビルド時に固定で、Vial / Rynk からは増やせない（→ [よくある変更のやり方 4](#4-レイヤを増やす--空きレイヤを使う)） |
 | Mod-Tap / Layer-Tap の追加・変更 | Vial で作ったものは `[behavior.morse]` の既定値（300 ms、permissive hold）で動く |
 | コンボの編集 | 枠 **48 個**（初期キーマップが 8 個使用） |
 | タップダンス（RMK では "morse"） | 枠 **48 個** |
@@ -132,8 +132,11 @@ ZMK との違い:
 
 ### ソースを変える必要があるもの
 
-トラックボールと動作パラメータは `keyboard.toml`（一部は `src/*.rs`）にあり、
-変えたらビルドが要ります。**手元に Rust 環境が無くても、GitHub でフォークして
+**トラックボール（感度・向き・デッドゾーン）、オートマウスレイヤ、
+スクロールレイヤ、レイヤ数** は Vial にも Rynk にも設定画面がありません。
+`keyboard.toml`（一部は `src/*.rs`）を編集してビルドし直す必要があります。
+よく変える項目の具体的な手順は[よくある変更のやり方](#よくある変更のやり方コピペ用)に
+まとめてあります。**手元に Rust 環境が無くても、GitHub でフォークして
 ブラウザで編集すれば Actions がビルドしてくれます**（後述）。
 
 | 変えたいこと | 場所 | 例 |
@@ -156,6 +159,109 @@ ZMK との違い:
 `keyboard.toml` の各項目にはコメントで理由を書いてあります。RMK 側の全項目は
 [RMK の設定リファレンス](https://rmk.rs/main/docs/configuration/appendix)を参照。
 
+### よくある変更のやり方（コピペ用）
+
+**どれも Vial / Rynk からは変えられません。** 下記を編集してビルドし直し、
+出来た UF2 を書き込みます（ビルドは「フォークしてブラウザだけでビルドする」
+の手順で、PC に開発環境は不要）。右半分だけで効く設定も、左右で設定を
+揃えておく方が混乱しません（トラックボール関連は右だけで効きます）。
+
+#### 1. オートマウスレイヤを使わない
+
+ボールを動かしてもレイヤが切り替わらなくなります。`keyboard.toml` の
+`[[behavior.auto_mouse_layer]]` ブロックを**丸ごと削除**（または各行の頭に
+`#` を付けてコメントアウト）してください。それだけで済みます
+（`[event.pointing]` などの購読枠はそのままでも動きます。余らせても
+数十バイトの無駄だけです）。
+
+レイヤ 4（Mouse）はキーマップに残るので、`MO(4)` などを置いて手動で
+使うこともできます。
+
+#### 2. オートマウスレイヤの設定を変える
+
+```toml
+[[behavior.auto_mouse_layer]]
+device_id = 0
+target_layer = 4        # 切り替わり先のレイヤ番号（0〜7）
+timeout = "1000ms"      # ボールを止めてから戻るまで。"600ms" など
+threshold = 1           # 反応する最小の移動量。上げると鈍くなる
+exclude_layers = [3]    # このレイヤが有効な間は切り替わらない（スクロールレイヤ）
+```
+
+`target_layer` を変えたら、**そのレイヤのキーマップ**（`[[keymap.layer]]` の
+5 番目 = レイヤ 4 が現在の Mouse）も意図したものになっているか確認してください。
+`src/pointing_mode.rs` の `MOUSE_LAYER` も同じ番号に合わせます。
+
+#### 3. スクロールレイヤの番号・速度・向きを変える
+
+`src/pointing_mode.rs` の冒頭にある定数です:
+
+```rust
+const SCROLL_LAYER: u8 = 3;   // このレイヤの間だけボールがホイールになる
+const MOUSE_LAYER: u8 = 4;    // オートマウスレイヤ（2 と同じ番号にする）
+
+const SCROLL_MODE: PointingMode = PointingMode::Scroll(ScrollConfig {
+    multiplier_x: 1,
+    divisor_x: 12,     // 横スクロール。大きいほど遅い
+    multiplier_y: 1,
+    divisor_y: 12,     // 縦スクロール。6 にすると倍速
+    invert_x: true,    // 横の向き
+    invert_y: true,    // 縦の向き（「下に転がすと上にスクロール」なら反転）
+});
+
+const CURSOR_MODE: PointingMode = PointingMode::Cursor(CursorConfig {
+    multiplier_x: 1,   // カーソル速度。2 で倍速（細かい調整は CPI 側で）
+    multiplier_y: 1,
+    invert_x: false,
+    invert_y: false,
+});
+```
+
+`SCROLL_LAYER` を変えたら、`keyboard.toml` の `exclude_layers` も同じ番号に
+してください（そうしないとスクロール中にオートマウスレイヤが被さります）。
+
+#### 4. レイヤを増やす / 空きレイヤを使う
+
+**レイヤ 5・6・7 は空**（全部透過）で用意してあるので、**増やさずに Vial で
+中身を作れます**。呼び出すキー（`MO(5)` や `LT(5, Space)`）も Vial で置けます。
+
+8 より増やしたいときだけ `keyboard.toml` を 2 か所:
+
+```toml
+[keymap]
+layers = 10          # <- 増やした数
+```
+
+```toml
+# 末尾の [[keymap.layer]] をコピーして、増やした数だけ並べる
+[[keymap.layer]]
+name = "user8"
+keys = """
+_ _ _ _ _  _ _ _ _ _
+_ _ _ _ _  _ _ _ _ _
+_ _ _ _ _  _ _ _ _ _
+_ _  _ _
+"""
+```
+
+`layers` の数と `[[keymap.layer]]` の個数は一致させてください（合わないと
+ビルドが止まります）。レイヤ 1 つあたり RAM 280 バイト（実測）なので、
+増やすこと自体のコストはほぼありません。
+
+#### 5. トラックボールの感度・ノイズ対策
+
+```toml
+[[split.central.input_device.paw3222]]
+cpi = 800                   # 608〜4826、38 刻み。上げると速い
+invert_x = true             # カーソルの向き（スクロールは 3 の invert_* 側）
+invert_y = true
+deadzone_threshold = 10     # 静止時のノイズを無視するカウント数。0 で無効
+deadzone_timeout_ms = 300   # 無動作でデッドゾーンが再び有効になるまで
+```
+
+「机を叩くとマウスレイヤに入る」なら `deadzone_threshold` を上げ、
+「ゆっくり動かし始めが無視される」なら下げてください。
+
 ### Vial 版と Rynk 版
 
 RMK には Vial のほかに純正のホストプロトコル **Rynk** があり、
@@ -169,7 +275,7 @@ GUI は <https://gui.rmk.rs/>（Chrome / Edge、WebUSB）。二つは排他な�
 | タップホールドの詳細（HRM / THUMB プロファイル別の hold timeout、permissive hold、flow tap、quick tap …） | △ 既定プロファイルの timeout のみ | **○** |
 | BT パネル、既定レイヤ、レイアウトバリアント | △ キーとして | ○ 専用画面 |
 | 状態表示（レイヤ、バッテリ、接続、左右） | × | ○ |
-| トラックボール設定 | × | × |
+| トラックボール設定・オートマウスレイヤ・スクロールレイヤ | × | × どちらも不可（`keyboard.toml` / `src/pointing_mode.rs` で設定） |
 | 成熟度 | RMK の既定。安定 | **実験的**。プロトコルが RMK のリリースごとに変わりうる。gui.rmk.rs が新しい RMK を前提にしていて噛み合わないことがある |
 
 迷ったら Vial 版。Rynk 版は「RMK らしい UI を試したい」人向けで、動かなければ
